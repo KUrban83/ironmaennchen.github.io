@@ -863,7 +863,7 @@ function renderEvents() {
     return;
   }
   list.innerHTML = state.events.map(ev => `
-    <div class="event-card ${ev.strategy ? 'has-strategy' : ''}" onclick="selectEvent(ev)" data-id="${ev.id}">
+    <div class="event-card ${ev.strategy ? 'has-strategy' : ''}" onclick="openEventModal(${ev.id})" data-id="${ev.id}">
       <div class="event-left">
         <div class="event-icon-wrap">🏆</div>
         <div>
