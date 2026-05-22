@@ -488,8 +488,8 @@ nav { flex: 1; padding: 0 12px; display: flex; flex-direction: column; gap: 2px;
 <!-- EVENT MODAL -->
 <div class="modal-overlay" id="event-modal">
   <div class="modal">
-    <div class="modal-title">Neues Event</div>
-    <div class="modal-sub">Wettkampf anlegen und Strecke konfigurieren</div>
+    <div class="modal-title" id="event-modal-title">Neues Event</div>
+    <div class="modal-sub" id="event-modal-sub">Wettkampf anlegen und Strecke konfigurieren</div>
 
     <div class="form-row2">
       <div class="form-group">
@@ -627,7 +627,7 @@ nav { flex: 1; padding: 0 12px; display: flex; flex-direction: column; gap: 2px;
 
     <div class="modal-footer">
       <button class="btn" onclick="closeEventModal()">Abbrechen</button>
-      <button class="btn primary" onclick="saveEvent()">Event speichern</button>
+      <button class="btn primary" id="event-save-btn" onclick="saveEvent()">Event speichern</button>
     </div>
   </div>
 </div>
@@ -659,6 +659,7 @@ let state = {
   apiKey: localStorage.getItem('im_apikey') || '',
   events: JSON.parse(localStorage.getItem('im_events') || '[]'),
   activeEvent: null,
+  editingEventId: null,
   chatHistory: [],
   strategy: null,
   gpxData: { bike: null, run: null },
@@ -672,6 +673,8 @@ function init() {
   renderEvents();
   if (state.events.length > 0) {
     selectEvent(state.events[0]);
+  } else {
+    clearActiveEventView();
   }
 }
 
@@ -726,22 +729,55 @@ function saveDashboard() {
 }
 
 // ─── EVENTS ──────────────────────────────────────────────────────────────────
-function openEventModal() {
-  state.gpxData = { bike: null, run: null };
-  document.getElementById('bike-drop').style.display = 'block';
-  document.getElementById('bike-loaded').style.display = 'none';
-  document.getElementById('run-drop').style.display = 'block';
-  document.getElementById('run-loaded').style.display = 'none';
+function openEventModal(eventId = null) {
+  const isEdit = eventId !== null;
+  const ev = isEdit ? state.events.find(e => e.id === eventId) : null;
+  state.editingEventId = ev ? ev.id : null;
+
+  document.getElementById('event-modal-title').textContent = isEdit ? 'Event bearbeiten' : 'Neues Event';
+  document.getElementById('event-modal-sub').textContent = isEdit
+    ? 'Wettkampf-Daten aktualisieren und Strecke anpassen'
+    : 'Wettkampf anlegen und Strecke konfigurieren';
+  document.getElementById('event-save-btn').textContent = isEdit ? 'Aenderungen speichern' : 'Event speichern';
+
+  document.getElementById('ev-name').value = ev ? ev.name || '' : '';
+  document.getElementById('ev-date').value = ev ? ev.date || '' : '';
+  document.getElementById('ev-location').value = ev ? ev.location || '' : '';
+  document.getElementById('ev-dist').value = ev ? ev.dist || 'full' : 'full';
+
+  const swim = ev?.swim || {};
+  document.getElementById('sw-dist').value = swim.dist || '3800';
+  document.getElementById('sw-temp').value = swim.temp || '20';
+  document.getElementById('sw-neo').value = swim.neo || 'yes';
+  document.getElementById('sw-cond').value = swim.cond || 'calm';
+
+  const bikeGpx = ev?.gpx?.bike || null;
+  const runGpx = ev?.gpx?.run || null;
+  state.gpxData = {
+    bike: bikeGpx ? { name: bikeGpx.name, stats: bikeGpx.stats, points: [] } : null,
+    run: runGpx ? { name: runGpx.name, stats: runGpx.stats, points: [] } : null
+  };
+
+  updateGpxSlotUi('bike');
+  updateGpxSlotUi('run');
+  document.getElementById('bike-gpx').value = '';
+  document.getElementById('run-gpx').value = '';
   document.getElementById('modal-map-wrap').style.display = 'none';
   document.getElementById('event-modal').classList.add('open');
 }
-function closeEventModal() { document.getElementById('event-modal').classList.remove('open'); }
+
+function closeEventModal() {
+  state.editingEventId = null;
+  document.getElementById('event-modal').classList.remove('open');
+}
 
 function saveEvent() {
+  const isEdit = state.editingEventId !== null;
+  const existing = isEdit ? state.events.find(e => e.id === state.editingEventId) : null;
   const name = document.getElementById('ev-name').value.trim();
   if (!name) { toast('Bitte Event-Name eingeben'); return; }
   const ev = {
-    id: Date.now(),
+    id: existing ? existing.id : Date.now(),
     name,
     date: document.getElementById('ev-date').value,
     location: document.getElementById('ev-location').value,
@@ -756,15 +792,22 @@ function saveEvent() {
       bike: state.gpxData.bike ? { name: state.gpxData.bike.name, stats: state.gpxData.bike.stats } : null,
       run: state.gpxData.run ? { name: state.gpxData.run.name, stats: state.gpxData.run.stats } : null
     },
-    chatHistory: [],
-    strategy: null
+    chatHistory: existing?.chatHistory || [],
+    strategy: existing?.strategy || null
   };
-  state.events.push(ev);
+
+  if (existing) {
+    const idx = state.events.findIndex(e => e.id === existing.id);
+    if (idx >= 0) state.events[idx] = ev;
+  } else {
+    state.events.push(ev);
+  }
+
   localStorage.setItem('im_events', JSON.stringify(state.events));
   selectEvent(ev);
   renderEvents();
   closeEventModal();
-  toast('Event gespeichert!');
+  toast(existing ? 'Event aktualisiert!' : 'Event gespeichert!');
 }
 
 function renderEvents() {
@@ -783,11 +826,67 @@ function renderEvents() {
         </div>
       </div>
       <div class="event-right">
+        <button class="btn-sm" onclick="event.stopPropagation();openEventModal(${ev.id})">Bearbeiten</button>
+        <button class="btn-sm" onclick="event.stopPropagation();duplicateEvent(${ev.id})">Duplizieren</button>
+        <button class="btn-sm" onclick="event.stopPropagation();deleteEvent(${ev.id})">Loeschen</button>
         <button class="btn-sm" onclick="event.stopPropagation();selectEventAndChat(${ev.id})">Interview ↗</button>
         <button class="btn-sm primary" onclick="event.stopPropagation();selectEventAndStrategy(${ev.id})">Strategie ↗</button>
       </div>
     </div>
   `).join('');
+}
+
+function clearActiveEventView() {
+  state.activeEvent = null;
+  state.chatHistory = [];
+  document.getElementById('no-event-msg').style.display = 'block';
+  document.getElementById('chat-area').style.display = 'none';
+  document.getElementById('chat-event-name').textContent = '–';
+  document.getElementById('chat-event-meta').textContent = '–';
+  document.getElementById('strat-event-sub').textContent = 'Kein Event ausgewaehlt';
+  document.getElementById('strategy-empty').style.display = 'block';
+  document.getElementById('strategy-content').style.display = 'none';
+}
+
+function duplicateEvent(id) {
+  const source = state.events.find(e => e.id === id);
+  if (!source) return;
+
+  const copy = {
+    ...source,
+    id: Date.now(),
+    name: source.name + ' (Kopie)',
+    chatHistory: [],
+    strategy: null
+  };
+
+  state.events.push(copy);
+  localStorage.setItem('im_events', JSON.stringify(state.events));
+  renderEvents();
+  selectEvent(copy);
+  toast('Event dupliziert');
+}
+
+function deleteEvent(id) {
+  const target = state.events.find(e => e.id === id);
+  if (!target) return;
+
+  const ok = confirm(`Event "${target.name}" wirklich loeschen?`);
+  if (!ok) return;
+
+  state.events = state.events.filter(e => e.id !== id);
+  localStorage.setItem('im_events', JSON.stringify(state.events));
+  renderEvents();
+
+  if (state.activeEvent && state.activeEvent.id === id) {
+    if (state.events.length > 0) {
+      selectEvent(state.events[0]);
+    } else {
+      clearActiveEventView();
+    }
+  }
+
+  toast('Event geloescht');
 }
 
 function distLabel(d) {
@@ -825,19 +924,37 @@ function loadGpx(sport, input) {
     const parsed = parseGpx(text);
     parsed.name = file.name;
     state.gpxData[sport] = parsed;
-    const meta = `${(parsed.stats.distance/1000).toFixed(1)} km · ${Math.round(parsed.stats.elevGain)} hm`;
-    document.getElementById(sport + '-drop').style.display = 'none';
-    document.getElementById(sport + '-loaded').style.display = 'flex';
-    document.getElementById(sport + '-file-name').textContent = file.name;
-    document.getElementById(sport + '-file-meta').textContent = meta;
+    updateGpxSlotUi(sport);
   };
   reader.readAsText(file);
 }
 
+function updateGpxSlotUi(sport) {
+  const data = state.gpxData[sport];
+  const drop = document.getElementById(sport + '-drop');
+  const loaded = document.getElementById(sport + '-loaded');
+  const fileName = document.getElementById(sport + '-file-name');
+  const fileMeta = document.getElementById(sport + '-file-meta');
+
+  if (!data) {
+    drop.style.display = 'block';
+    loaded.style.display = 'none';
+    return;
+  }
+
+  drop.style.display = 'none';
+  loaded.style.display = 'flex';
+  fileName.textContent = data.name || 'GPX geladen';
+  if (data.stats) {
+    fileMeta.textContent = `${(data.stats.distance / 1000).toFixed(1)} km · ${Math.round(data.stats.elevGain)} hm`;
+  } else {
+    fileMeta.textContent = 'Statistiken nicht verfuegbar';
+  }
+}
+
 function clearGpx(sport) {
   state.gpxData[sport] = null;
-  document.getElementById(sport + '-drop').style.display = 'block';
-  document.getElementById(sport + '-loaded').style.display = 'none';
+  updateGpxSlotUi(sport);
   document.getElementById(sport + '-gpx').value = '';
   document.getElementById('modal-map-wrap').style.display = 'none';
 }
@@ -876,7 +993,10 @@ function haversine(lat1, lon1, lat2, lon2) {
 
 function showGpxMap(sport) {
   const data = state.gpxData[sport];
-  if (!data || data.points.length === 0) return;
+  if (!data || !data.points || data.points.length === 0) {
+    toast('Kartenvorschau ist nur fuer neu hochgeladene GPX-Dateien verfuegbar.');
+    return;
+  }
   document.getElementById('modal-map-wrap').style.display = 'block';
   document.getElementById('modal-map-title').textContent = sport === 'bike' ? 'Rad-Strecke' : 'Lauf-Strecke';
   document.getElementById('map-dist').textContent = (data.stats.distance/1000).toFixed(1) + ' km';
