@@ -161,6 +161,14 @@ nav { flex: 1; padding: 0 12px; display: flex; flex-direction: column; gap: 2px;
 .event-name { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
 .event-meta { font-size: 11px; color: var(--text2); font-family: var(--mono); }
 .event-right { display: flex; gap: 8px; }
+.event-detail { margin-top: 18px; }
+.event-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.event-detail-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.event-detail-meta { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+.detail-sport-switch { display: inline-flex; gap: 6px; }
+.detail-sport-btn { font-size: 11px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; }
+.detail-sport-btn.active { color: var(--text); border-color: var(--accent); }
+#event-detail-map { height: 300px; }
 .btn-sm { font-size: 12px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border2); background: none; color: var(--text2); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
 .btn-sm:hover { background: var(--bg3); color: var(--text); }
 .btn-sm.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 500; }
@@ -437,6 +445,42 @@ nav { flex: 1; padding: 0 12px; display: flex; flex-direction: column; gap: 2px;
       <div style="margin-top:10px;">
         <button class="btn-new" onclick="openEventModal()">+ Neues Event anlegen</button>
       </div>
+
+      <div id="event-detail-wrap" class="card event-detail" style="display:none;">
+        <div class="event-detail-head">
+          <div>
+            <div class="event-detail-title" id="event-detail-title">Event-Details</div>
+            <div class="event-detail-meta" id="event-detail-meta">–</div>
+          </div>
+          <div class="detail-sport-switch" id="detail-sport-switch" style="display:none;">
+            <button id="detail-bike-btn" class="detail-sport-btn" onclick="setDetailMapSport('bike')">Rad</button>
+            <button id="detail-run-btn" class="detail-sport-btn" onclick="setDetailMapSport('run')">Lauf</button>
+          </div>
+        </div>
+
+        <div id="event-detail-empty" style="font-size:12px;color:var(--text3);padding:10px 0;">Fuer dieses Event wurden noch keine GPX-Strecken hinterlegt.</div>
+
+        <div id="event-detail-map-wrap" class="map-wrap" style="display:none;margin-top:0;">
+          <div class="map-header">
+            <div class="map-title" id="event-detail-map-title">Streckenkarte</div>
+            <div class="map-legend">
+              <div class="map-leg"><div class="map-leg-line" style="background:#4a9eff"></div>Rad</div>
+              <div class="map-leg"><div class="map-leg-line" style="background:#ff9f47"></div>Lauf</div>
+            </div>
+          </div>
+          <div id="event-detail-map"></div>
+          <div class="map-stats">
+            <div class="map-stat"><div class="map-stat-label">Distanz</div><div class="map-stat-val" id="detail-map-dist">–</div></div>
+            <div class="map-stat"><div class="map-stat-label">Hoehenmeter</div><div class="map-stat-val" id="detail-map-hm">–</div></div>
+            <div class="map-stat"><div class="map-stat-label">Punkte</div><div class="map-stat-val" id="detail-map-pts">–</div></div>
+            <div class="map-stat"><div class="map-stat-label">Max. Hoehe</div><div class="map-stat-val" id="detail-map-maxh">–</div></div>
+          </div>
+          <div class="elev-wrap" style="padding:14px 16px;">
+            <div class="elev-title">Hoehenprofil</div>
+            <canvas id="detail-elev-canvas" height="70" style="width:100%;"></canvas>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- CHAT -->
@@ -660,10 +704,12 @@ let state = {
   events: JSON.parse(localStorage.getItem('im_events') || '[]'),
   activeEvent: null,
   editingEventId: null,
+  detailMapSport: null,
   chatHistory: [],
   strategy: null,
   gpxData: { bike: null, run: null },
   leafletMap: null,
+  detailLeafletMap: null,
   leafletLayers: {}
 };
 
@@ -754,8 +800,8 @@ function openEventModal(eventId = null) {
   const bikeGpx = ev?.gpx?.bike || null;
   const runGpx = ev?.gpx?.run || null;
   state.gpxData = {
-    bike: bikeGpx ? { name: bikeGpx.name, stats: bikeGpx.stats, points: [] } : null,
-    run: runGpx ? { name: runGpx.name, stats: runGpx.stats, points: [] } : null
+    bike: bikeGpx ? { name: bikeGpx.name, stats: bikeGpx.stats, points: Array.isArray(bikeGpx.points) ? bikeGpx.points : [] } : null,
+    run: runGpx ? { name: runGpx.name, stats: runGpx.stats, points: Array.isArray(runGpx.points) ? runGpx.points : [] } : null
   };
 
   updateGpxSlotUi('bike');
@@ -789,8 +835,8 @@ function saveEvent() {
       cond: document.getElementById('sw-cond').value
     },
     gpx: {
-      bike: state.gpxData.bike ? { name: state.gpxData.bike.name, stats: state.gpxData.bike.stats } : null,
-      run: state.gpxData.run ? { name: state.gpxData.run.name, stats: state.gpxData.run.stats } : null
+      bike: state.gpxData.bike ? { name: state.gpxData.bike.name, stats: state.gpxData.bike.stats, points: state.gpxData.bike.points || [] } : null,
+      run: state.gpxData.run ? { name: state.gpxData.run.name, stats: state.gpxData.run.stats, points: state.gpxData.run.points || [] } : null
     },
     chatHistory: existing?.chatHistory || [],
     strategy: existing?.strategy || null
@@ -839,10 +885,16 @@ function renderEvents() {
 function clearActiveEventView() {
   state.activeEvent = null;
   state.chatHistory = [];
+  state.detailMapSport = null;
+  if (state.detailLeafletMap) {
+    state.detailLeafletMap.remove();
+    state.detailLeafletMap = null;
+  }
   document.getElementById('no-event-msg').style.display = 'block';
   document.getElementById('chat-area').style.display = 'none';
   document.getElementById('chat-event-name').textContent = '–';
   document.getElementById('chat-event-meta').textContent = '–';
+  document.getElementById('event-detail-wrap').style.display = 'none';
   document.getElementById('strat-event-sub').textContent = 'Kein Event ausgewaehlt';
   document.getElementById('strategy-empty').style.display = 'block';
   document.getElementById('strategy-content').style.display = 'none';
@@ -897,6 +949,7 @@ function selectEvent(ev) {
   if (typeof ev === 'number') ev = state.events.find(e => e.id === ev);
   if (!ev) return;
   state.activeEvent = ev;
+  renderEventDetails(ev);
   // Update chat
   document.getElementById('no-event-msg').style.display = 'none';
   document.getElementById('chat-area').style.display = 'flex';
@@ -913,6 +966,91 @@ function selectEvent(ev) {
 
 function selectEventAndChat(id) { selectEvent(id); showPage('chat'); }
 function selectEventAndStrategy(id) { selectEvent(id); showPage('strategy'); }
+
+function renderEventDetails(ev) {
+  const wrap = document.getElementById('event-detail-wrap');
+  const empty = document.getElementById('event-detail-empty');
+  const mapWrap = document.getElementById('event-detail-map-wrap');
+  const sportSwitch = document.getElementById('detail-sport-switch');
+
+  wrap.style.display = 'block';
+  document.getElementById('event-detail-title').textContent = ev.name;
+  document.getElementById('event-detail-meta').textContent = `${ev.date || 'Datum TBD'} · ${ev.location || '–'} · ${distLabel(ev.dist)}`;
+
+  const hasBike = !!(ev.gpx?.bike && Array.isArray(ev.gpx.bike.points) && ev.gpx.bike.points.length > 0);
+  const hasRun = !!(ev.gpx?.run && Array.isArray(ev.gpx.run.points) && ev.gpx.run.points.length > 0);
+
+  if (!hasBike && !hasRun) {
+    sportSwitch.style.display = 'none';
+    mapWrap.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'Fuer dieses Event wurden noch keine GPX-Strecken hinterlegt.';
+    if (state.detailLeafletMap) {
+      state.detailLeafletMap.remove();
+      state.detailLeafletMap = null;
+    }
+    return;
+  }
+
+  empty.style.display = 'none';
+  sportSwitch.style.display = (hasBike && hasRun) ? 'inline-flex' : 'none';
+  state.detailMapSport = hasBike ? 'bike' : 'run';
+  if (hasRun && !hasBike) state.detailMapSport = 'run';
+
+  renderDetailMapForSport(state.detailMapSport);
+}
+
+function setDetailMapSport(sport) {
+  if (!state.activeEvent) return;
+  const gpx = state.activeEvent.gpx?.[sport];
+  if (!gpx || !Array.isArray(gpx.points) || gpx.points.length === 0) return;
+  state.detailMapSport = sport;
+  renderDetailMapForSport(sport);
+}
+
+function renderDetailMapForSport(sport) {
+  if (!state.activeEvent) return;
+  const data = state.activeEvent.gpx?.[sport];
+  const mapWrap = document.getElementById('event-detail-map-wrap');
+  if (!data || !Array.isArray(data.points) || data.points.length === 0) {
+    mapWrap.style.display = 'none';
+    return;
+  }
+
+  mapWrap.style.display = 'block';
+  document.getElementById('event-detail-map-title').textContent = sport === 'bike' ? 'Rad-Strecke' : 'Lauf-Strecke';
+  document.getElementById('detail-map-dist').textContent = (data.stats.distance / 1000).toFixed(1) + ' km';
+  document.getElementById('detail-map-hm').textContent = Math.round(data.stats.elevGain) + ' m';
+  document.getElementById('detail-map-pts').textContent = data.stats.pointCount;
+  document.getElementById('detail-map-maxh').textContent = Math.round(data.stats.maxElev) + ' m';
+
+  document.getElementById('detail-bike-btn').classList.toggle('active', sport === 'bike');
+  document.getElementById('detail-run-btn').classList.toggle('active', sport === 'run');
+
+  if (state.detailLeafletMap) {
+    state.detailLeafletMap.remove();
+    state.detailLeafletMap = null;
+  }
+
+  state.detailLeafletMap = L.map('event-detail-map', { zoomControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 18
+  }).addTo(state.detailLeafletMap);
+
+  const color = sport === 'bike' ? '#4a9eff' : '#ff9f47';
+  const latlngs = data.points.map(p => [p[0], p[1]]);
+  const poly = L.polyline(latlngs, { color, weight: 3, opacity: 0.85 }).addTo(state.detailLeafletMap);
+
+  L.circleMarker(latlngs[0], { radius: 7, color: '#3dd68c', fillColor: '#3dd68c', fillOpacity: 1 })
+    .bindPopup('Start').addTo(state.detailLeafletMap);
+  L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#ff5757', fillColor: '#ff5757', fillOpacity: 1 })
+    .bindPopup('Ziel').addTo(state.detailLeafletMap);
+
+  state.detailLeafletMap.fitBounds(poly.getBounds(), { padding: [20, 20] });
+  setTimeout(() => state.detailLeafletMap && state.detailLeafletMap.invalidateSize(), 50);
+  drawElevation(data, 'detail-elev-canvas', color);
+}
 
 // ─── GPX PARSING ─────────────────────────────────────────────────────────────
 function loadGpx(sport, input) {
@@ -994,7 +1132,7 @@ function haversine(lat1, lon1, lat2, lon2) {
 function showGpxMap(sport) {
   const data = state.gpxData[sport];
   if (!data || !data.points || data.points.length === 0) {
-    toast('Kartenvorschau ist nur fuer neu hochgeladene GPX-Dateien verfuegbar.');
+    toast('Bei diesem Event fehlen GPX-Trackpunkte. Bitte GPX einmal neu hochladen.');
     return;
   }
   document.getElementById('modal-map-wrap').style.display = 'block';
@@ -1032,12 +1170,12 @@ function showGpxMap(sport) {
   }, 100);
 }
 
-function drawElevation(data) {
-  const canvas = document.getElementById('elev-canvas');
+function drawElevation(data, canvasId = 'elev-canvas', strokeColor = '#4a9eff') {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   canvas.width = canvas.offsetWidth * window.devicePixelRatio || 600;
-  const W = canvas.width, H = canvas.height * window.devicePixelRatio || 70;
+  const H = canvas.height * window.devicePixelRatio || 70;
   canvas.height = H;
   ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
   const cW = canvas.offsetWidth, cH = 70;
@@ -1054,7 +1192,7 @@ function drawElevation(data) {
     const y = cH - ((e - minE) / range) * (cH - 10) - 5;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = '#4a9eff';
+  ctx.strokeStyle = strokeColor;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
@@ -1062,7 +1200,7 @@ function drawElevation(data) {
   ctx.lineTo(cW, cH);
   ctx.lineTo(0, cH);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(74,158,255,0.12)';
+  ctx.fillStyle = strokeColor === '#ff9f47' ? 'rgba(255,159,71,0.12)' : 'rgba(74,158,255,0.12)';
   ctx.fill();
 }
 
