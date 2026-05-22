@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ironman Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  --bg: #0d0f12;
+  --bg2: #13161b;
+  --bg3: #1a1e26;
+  --bg4: #22283300;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #f0f2f5;
+  --text2: #8b92a0;
+  --text3: #555e6e;
+  --accent: #e8ff47;
+  --accent2: #b8d400;
+  --blue: #4a9eff;
+  --red: #ff5757;
+  --green: #3dd68c;
+  --orange: #ff9f47;
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --r: 10px;
+  --r2: 16px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; overflow: hidden; }
+
+/* LAYOUT */
+.app { display: flex; height: 100vh; }
+.sidebar { width: 220px; flex-shrink: 0; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 24px 0; }
+.logo { padding: 0 20px 28px; display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.logo-icon svg { width: 18px; height: 18px; }
+.logo-text { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.3px; }
+.logo-sub { font-size: 10px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.05em; }
+nav { flex: 1; padding: 0 12px; display: flex; flex-direction: column; gap: 2px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13px; font-weight: 400; transition: all 0.15s; border: none; background: none; width: 100%; text-align: left; }
+.nav-item:hover { background: var(--bg3); color: var(--text); }
+.nav-item.active { background: var(--bg3); color: var(--text); font-weight: 500; }
+.nav-item.active .nav-dot { background: var(--accent); }
+.nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; transition: background 0.15s; }
+.nav-icon { width: 16px; height: 16px; opacity: 0.6; }
+.nav-item.active .nav-icon { opacity: 1; }
+.sidebar-bottom { padding: 16px 20px 0; border-top: 1px solid var(--border); }
+.api-status { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text3); font-family: var(--mono); cursor: pointer; }
+.api-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.api-dot.connected { background: var(--green); }
+
+.main { flex: 1; overflow-y: auto; }
+.page { display: none; padding: 32px; min-height: 100%; }
+.page.active { display: block; }
+
+/* TYPOGRAPHY */
+.page-header { margin-bottom: 28px; }
+.page-title { font-size: 24px; font-weight: 600; color: var(--text); letter-spacing: -0.5px; margin-bottom: 4px; }
+.page-sub { font-size: 13px; color: var(--text2); }
+
+/* CARDS */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 20px; }
+.card-title { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; font-family: var(--mono); }
+
+/* METRIC GRID */
+.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.metric-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 16px 18px; }
+.metric-label { font-size: 11px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.05em; margin-bottom: 6px; }
+.metric-value { font-size: 26px; font-weight: 600; color: var(--text); letter-spacing: -1px; line-height: 1; }
+.metric-unit { font-size: 13px; color: var(--text2); font-weight: 400; }
+.metric-delta { font-size: 11px; margin-top: 6px; font-family: var(--mono); }
+.delta-up { color: var(--green); }
+.delta-down { color: var(--red); }
+.delta-neutral { color: var(--text3); }
+
+/* CHART */
+.chart-wrap { position: relative; height: 140px; }
+.chart-label { font-size: 10px; font-family: var(--mono); color: var(--text3); }
+
+/* ACTIVITY CARDS */
+.act-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.act-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 16px; transition: border-color 0.15s; }
+.act-card:hover { border-color: var(--border2); }
+.act-sport { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+.sport-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-family: var(--mono); padding: 3px 8px; border-radius: 99px; font-weight: 500; }
+.pill-bike { background: rgba(74,158,255,0.12); color: var(--blue); }
+.pill-run { background: rgba(255,159,71,0.12); color: var(--orange); }
+.pill-swim { background: rgba(61,214,140,0.12); color: var(--green); }
+.act-name { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 12px; }
+.act-stat-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.act-stat-row:last-child { border-bottom: none; }
+.act-stat-key { color: var(--text3); }
+.act-stat-val { color: var(--text); font-family: var(--mono); font-weight: 500; }
+
+/* FORM */
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 11px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.05em; margin-bottom: 6px; display: block; }
+.form-input { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 12px; color: var(--text); font-family: var(--font); font-size: 13px; outline: none; transition: border-color 0.15s; }
+.form-input:focus { border-color: var(--border2); }
+.form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+/* GPX SLOTS */
+.gpx-slots { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.gpx-slot { border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; }
+.gpx-slot-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--bg3); }
+.sport-badge { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.badge-bike { background: rgba(74,158,255,0.15); color: var(--blue); }
+.badge-run  { background: rgba(255,159,71,0.15); color: var(--orange); }
+.badge-swim { background: rgba(61,214,140,0.15); color: var(--green); }
+.slot-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
+.slot-tag { font-size: 10px; font-family: var(--mono); color: var(--text3); background: var(--bg2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 99px; }
+.gpx-slot-body { padding: 12px 16px; }
+.gpx-drop { border: 1px dashed var(--border2); border-radius: var(--r); padding: 18px; text-align: center; cursor: pointer; transition: background 0.15s; }
+.gpx-drop:hover { background: var(--bg3); }
+.gpx-drop-icon { font-size: 20px; margin-bottom: 6px; }
+.gpx-drop-text { font-size: 12px; color: var(--text2); }
+.gpx-drop-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+.gpx-loaded { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gpx-file-info { display: flex; align-items: center; gap: 10px; }
+.gpx-file-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.gpx-file-meta { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-top: 2px; }
+.gpx-actions { display: flex; gap: 6px; }
+.btn-xs { font-size: 11px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border2); background: none; color: var(--text2); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+.btn-xs:hover { background: var(--bg3); color: var(--text); }
+.btn-xs.danger:hover { border-color: var(--red); color: var(--red); }
+
+/* SWIM FORM */
+.swim-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* MAP */
+.map-wrap { border: 1px solid var(--border); border-radius: var(--r2); overflow: hidden; margin-top: 16px; }
+.map-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--bg3); border-bottom: 1px solid var(--border); }
+.map-title { font-size: 12px; font-weight: 500; color: var(--text); }
+.map-legend { display: flex; gap: 12px; }
+.map-leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); font-family: var(--mono); }
+.map-leg-line { width: 16px; height: 2px; border-radius: 1px; }
+#gpx-map { height: 280px; }
+.map-stats { display: grid; grid-template-columns: repeat(4, 1fr); }
+.map-stat { padding: 10px 14px; border-top: 1px solid var(--border); }
+.map-stat:not(:last-child) { border-right: 1px solid var(--border); }
+.map-stat-label { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-bottom: 3px; }
+.map-stat-val { font-size: 14px; font-weight: 600; color: var(--text); }
+
+/* ELEVATION */
+.elev-wrap { margin-top: 12px; }
+.elev-title { font-size: 11px; font-family: var(--mono); color: var(--text3); margin-bottom: 8px; }
+
+/* EVENTS LIST */
+.events-list { display: flex; flex-direction: column; gap: 10px; }
+.event-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; transition: border-color 0.15s; cursor: pointer; }
+.event-card:hover { border-color: var(--border2); }
+.event-card.has-strategy { border-left: 3px solid var(--accent); }
+.event-left { display: flex; align-items: center; gap: 14px; }
+.event-icon-wrap { width: 42px; height: 42px; border-radius: 10px; background: rgba(232,255,71,0.1); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.event-name { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+.event-meta { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+.event-right { display: flex; gap: 8px; }
+.btn-sm { font-size: 12px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border2); background: none; color: var(--text2); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+.btn-sm:hover { background: var(--bg3); color: var(--text); }
+.btn-sm.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 500; }
+.btn-sm.primary:hover { background: var(--accent2); border-color: var(--accent2); }
+.btn-new { display: flex; align-items: center; gap: 8px; width: 100%; padding: 14px 20px; border: 1px dashed var(--border2); border-radius: var(--r2); background: none; color: var(--text3); font-size: 13px; cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+.btn-new:hover { background: var(--bg2); color: var(--text2); border-color: var(--border2); }
+
+/* MODAL */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--r2); padding: 24px; width: 560px; max-height: 90vh; overflow-y: auto; }
+.modal-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.modal-sub { font-size: 12px; color: var(--text2); margin-bottom: 20px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* CHAT */
+.chat-layout { display: flex; flex-direction: column; height: calc(100vh - 64px); }
+.chat-event-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+.chat-event-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.chat-event-meta { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-top: 2px; }
+.chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-bottom: 16px; }
+.msg-row { display: flex; align-items: flex-start; gap: 10px; }
+.msg-row.user { flex-direction: row-reverse; }
+.msg-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.avatar-ai { background: rgba(232,255,71,0.15); color: var(--accent); }
+.avatar-user { background: var(--bg3); color: var(--text2); }
+.msg-bubble { max-width: 72%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.55; }
+.msg-row.ai .msg-bubble { background: var(--bg3); color: var(--text); border-bottom-left-radius: 4px; }
+.msg-row.user .msg-bubble { background: rgba(232,255,71,0.1); color: var(--text); border: 1px solid rgba(232,255,71,0.2); border-bottom-right-radius: 4px; }
+.msg-bubble.loading { color: var(--text2); }
+.typing-dots { display: inline-flex; gap: 4px; }
+.typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--text3); animation: blink 1.2s infinite; }
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+.chat-input-wrap { display: flex; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r2); padding: 11px 16px; color: var(--text); font-family: var(--font); font-size: 13px; outline: none; resize: none; transition: border-color 0.15s; }
+.chat-input:focus { border-color: var(--border2); }
+.chat-send { background: var(--accent); color: #000; border: none; border-radius: var(--r); padding: 11px 18px; font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+.chat-send:hover { background: var(--accent2); }
+.chat-send:disabled { background: var(--bg3); color: var(--text3); cursor: not-allowed; }
+
+/* STRATEGY */
+.strategy-header { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.strat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.strat-section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r2); padding: 18px; }
+.strat-section.full { grid-column: 1 / -1; }
+.strat-title { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; font-family: var(--mono); }
+.seg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.seg-table th { text-align: left; color: var(--text3); font-weight: 500; padding: 0 10px 10px 0; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; }
+.seg-table td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+.seg-table tr:last-child td { border-bottom: none; }
+.zone-pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-family: var(--mono); font-weight: 500; }
+.z2 { background: rgba(61,214,140,0.12); color: var(--green); }
+.z3 { background: rgba(255,159,71,0.12); color: var(--orange); }
+.vp-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.vp-row:last-of-type { border-bottom: none; }
+.vp-time { width: 44px; font-family: var(--mono); font-size: 11px; color: var(--text2); }
+.vp-bar-wrap { flex: 1; height: 4px; background: var(--bg3); border-radius: 2px; }
+.vp-bar { height: 100%; border-radius: 2px; }
+.vp-desc { width: 160px; font-size: 11px; color: var(--text2); }
+.vp-carbs { width: 36px; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--text); }
+.run-zones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.run-zone { background: var(--bg3); border-radius: var(--r); padding: 10px 12px; }
+.run-zone-label { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-bottom: 4px; }
+.run-zone-val { font-size: 18px; font-weight: 600; color: var(--text); letter-spacing: -0.5px; }
+.run-zone-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.strategy-empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+.strategy-empty-icon { font-size: 40px; margin-bottom: 12px; }
+.strategy-empty-text { font-size: 14px; color: var(--text2); margin-bottom: 6px; }
+.strategy-empty-sub { font-size: 12px; }
+
+/* API KEY MODAL */
+.api-key-input { font-family: var(--mono); letter-spacing: 0.05em; }
+
+/* SETTINGS */
+.settings-section { margin-bottom: 24px; }
+.settings-label { font-size: 11px; font-family: var(--mono); color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 12px; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.settings-row:last-child { border-bottom: none; }
+.settings-key { font-size: 13px; color: var(--text2); }
+.settings-val { font-size: 13px; color: var(--text); font-family: var(--mono); }
+
+/* DIVIDER */
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+/* BUTTONS */
+.btn { padding: 9px 18px; border-radius: var(--r); border: 1px solid var(--border2); background: none; color: var(--text2); font-family: var(--font); font-size: 13px; cursor: pointer; transition: all 0.15s; }
+.btn:hover { background: var(--bg3); color: var(--text); }
+.btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { background: var(--accent2); border-color: var(--accent2); }
+
+/* TOAST */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 12px 16px; font-size: 13px; color: var(--text); display: none; z-index: 2000; }
+.toast.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M10 2L3 7v11h5v-5h4v5h5V7L10 2z" fill="#000"/></svg>
+      </div>
+      <div>
+        <div class="logo-text">Ironman Planner</div>
+        <div class="logo-sub">v0.1 prototype</div>
+      </div>
+    </div>
+    <nav>
+      <button class="nav-item active" onclick="showPage('dashboard')">
+        <div class="nav-dot"></div>
+        Dashboard
+      </button>
+      <button class="nav-item" onclick="showPage('events')">
+        <div class="nav-dot"></div>
+        Events
+      </button>
+      <button class="nav-item" onclick="showPage('chat')">
+        <div class="nav-dot"></div>
+        KI-Interview
+      </button>
+      <button class="nav-item" onclick="showPage('strategy')">
+        <div class="nav-dot"></div>
+        Strategie
+      </button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="api-status" onclick="openApiModal()" title="API Key konfigurieren">
+        <div class="api-dot" id="api-dot"></div>
+        <span id="api-status-text">API Key setzen</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div class="page-title">Dashboard</div>
+        <div class="page-sub">Dein aktueller Fitness-Stand</div>
+      </div>
+
+      <div id="dashboard-manual" style="display:none;margin-bottom:20px;">
+        <div class="card">
+          <div class="card-title">Fitness-Daten eingeben</div>
+          <div class="form-row3">
+            <div class="form-group">
+              <label class="form-label">FTP (Watt)</label>
+              <input class="form-input" type="number" id="inp-ftp" placeholder="z.B. 280" value="287">
+            </div>
+            <div class="form-group">
+              <label class="form-label">CTL (Fitness)</label>
+              <input class="form-input" type="number" id="inp-ctl" placeholder="z.B. 70" value="74">
+            </div>
+            <div class="form-group">
+              <label class="form-label">ATL (Müdigkeit)</label>
+              <input class="form-input" type="number" id="inp-atl" placeholder="z.B. 75" value="81">
+            </div>
+          </div>
+          <div class="form-row3">
+            <div class="form-group">
+              <label class="form-label">Lauf-Threshold Pace (/km)</label>
+              <input class="form-input" type="text" id="inp-runpace" placeholder="z.B. 4:30" value="4:32">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Swim CSS (/100m)</label>
+              <input class="form-input" type="text" id="inp-css" placeholder="z.B. 1:38" value="1:38">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Gewicht (kg)</label>
+              <input class="form-input" type="number" id="inp-weight" placeholder="z.B. 75" value="78">
+            </div>
+          </div>
+          <button class="btn primary" onclick="saveDashboard()">Speichern</button>
+        </div>
+      </div>
+
+      <div id="dashboard-metrics">
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-label">FTP</div>
+            <div class="metric-value" id="disp-ftp">287 <span class="metric-unit">W</span></div>
+            <div class="metric-delta delta-up">↑ +4W diese Woche</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">CTL · Fitness</div>
+            <div class="metric-value" id="disp-ctl">74</div>
+            <div class="metric-delta delta-up">↑ +2 diese Woche</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">ATL · Müdigkeit</div>
+            <div class="metric-value" id="disp-atl">81</div>
+            <div class="metric-delta delta-down">↑ +6 diese Woche</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">TSB · Form</div>
+            <div class="metric-value" id="disp-tsb">−7</div>
+            <div class="metric-delta delta-neutral">Aufbauphase</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-title">Form-Kurve · letzte 8 Wochen</div>
+          <div class="chart-wrap">
+            <svg id="form-chart" viewBox="0 0 640 120" style="width:100%;height:100%;">
+              <line x1="0" y1="60" x2="640" y2="60" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              <line x1="0" y1="30" x2="640" y2="30" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+              <line x1="0" y1="90" x2="640" y2="90" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+              <!-- CTL -->
+              <polyline points="0,95 91,88 182,80 273,76 364,72 455,67 546,62 640,58" fill="none" stroke="#4a9eff" stroke-width="2"/>
+              <!-- ATL -->
+              <polyline points="0,93 91,90 182,83 273,70 364,62 455,55 546,47 640,43" fill="none" stroke="#ff5757" stroke-width="1.5" stroke-dasharray="4,3"/>
+              <!-- TSB -->
+              <polyline points="0,55 91,58 182,59 273,63 364,66 455,65 546,63 640,61" fill="none" stroke="#3dd68c" stroke-width="1.5"/>
+              <!-- x labels -->
+              <text x="0" y="115" class="chart-label">Wo10</text>
+              <text x="273" y="115" class="chart-label">Wo13</text>
+              <text x="546" y="115" class="chart-label">Wo17</text>
+              <!-- legend -->
+              <circle cx="580" cy="10" r="4" fill="#4a9eff"/>
+              <text x="588" y="14" class="chart-label" fill="#4a9eff">CTL</text>
+              <line x1="608" y1="10" x2="624" y2="10" stroke="#ff5757" stroke-width="1.5" stroke-dasharray="3,2"/>
+              <text x="628" y="14" class="chart-label" fill="#ff5757">ATL</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="card-title" style="margin-bottom:12px;">Letzte Aktivitäten <span style="color:var(--text3);font-size:10px;margin-left:6px;">(Beispieldaten)</span></div>
+        <div class="act-grid">
+          <div class="act-card">
+            <div class="act-sport"><span class="sport-pill pill-bike">🚴 Rad</span></div>
+            <div class="act-name">Langer Sonntag-Ride</div>
+            <div class="act-stat-row"><span class="act-stat-key">Distanz</span><span class="act-stat-val">142 km</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">Ø Watt</span><span class="act-stat-val">201 W</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">IF</span><span class="act-stat-val">0.70</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">Höhenmeter</span><span class="act-stat-val">1.240 m</span></div>
+          </div>
+          <div class="act-card">
+            <div class="act-sport"><span class="sport-pill pill-run">🏃 Lauf</span></div>
+            <div class="act-name">Tempo-Intervalle</div>
+            <div class="act-stat-row"><span class="act-stat-key">Distanz</span><span class="act-stat-val">14 km</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">Ø Pace</span><span class="act-stat-val">4:52 /km</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">HF Ø</span><span class="act-stat-val">158 bpm</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">TSS</span><span class="act-stat-val">98</span></div>
+          </div>
+          <div class="act-card">
+            <div class="act-sport"><span class="sport-pill pill-swim">🏊 Swim</span></div>
+            <div class="act-name">CSS-Training</div>
+            <div class="act-stat-row"><span class="act-stat-key">Distanz</span><span class="act-stat-val">3.800 m</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">CSS-Pace</span><span class="act-stat-val">1:38/100</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">Dauer</span><span class="act-stat-val">62 min</span></div>
+            <div class="act-stat-row"><span class="act-stat-key">TSS</span><span class="act-stat-val">62</span></div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;text-align:center;">
+          <button class="btn" onclick="document.getElementById('dashboard-manual').style.display='block'">✏️ Daten bearbeiten</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENTS -->
+    <div id="page-events" class="page">
+      <div class="page-header">
+        <div class="page-title">Events</div>
+        <div class="page-sub">Deine geplanten Wettkämpfe</div>
+      </div>
+      <div class="events-list" id="events-list"></div>
+      <div style="margin-top:10px;">
+        <button class="btn-new" onclick="openEventModal()">+ Neues Event anlegen</button>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div id="page-chat" class="page">
+      <div class="page-header">
+        <div class="page-title">KI-Interview</div>
+        <div class="page-sub">Der Assistent entwickelt deine individuelle Rennstrategie</div>
+      </div>
+      <div id="no-event-msg" style="text-align:center;padding:60px 20px;color:var(--text3);">
+        <div style="font-size:36px;margin-bottom:12px;">🏁</div>
+        <div style="font-size:14px;color:var(--text2);margin-bottom:6px;">Kein Event ausgewählt</div>
+        <div style="font-size:12px;margin-bottom:16px;">Erstelle zuerst ein Event unter "Events"</div>
+        <button class="btn" onclick="showPage('events')">→ Events</button>
+      </div>
+      <div id="chat-area" style="display:none;" class="chat-layout">
+        <div class="chat-event-bar">
+          <div>
+            <div class="chat-event-name" id="chat-event-name">–</div>
+            <div class="chat-event-meta" id="chat-event-meta">–</div>
+          </div>
+          <button class="btn-sm primary" onclick="generateStrategy()">Strategie generieren ↗</button>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-wrap">
+          <textarea class="chat-input" id="chat-input" rows="2" placeholder="Deine Antwort..." onkeydown="handleChatKey(event)"></textarea>
+          <button class="chat-send" id="chat-send-btn" onclick="sendMessage()">Senden</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STRATEGY -->
+    <div id="page-strategy" class="page">
+      <div class="page-header">
+        <div class="page-title">Strategie</div>
+        <div class="page-sub" id="strat-event-sub">Kein Event ausgewählt</div>
+      </div>
+      <div id="strategy-empty" class="strategy-empty">
+        <div class="strategy-empty-icon">📋</div>
+        <div class="strategy-empty-text">Noch keine Strategie generiert</div>
+        <div class="strategy-empty-sub">Führe zuerst das KI-Interview durch</div>
+        <div style="margin-top:16px;"><button class="btn" onclick="showPage('chat')">→ KI-Interview</button></div>
+      </div>
+      <div id="strategy-content" style="display:none;"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- EVENT MODAL -->
+<div class="modal-overlay" id="event-modal">
+  <div class="modal">
+    <div class="modal-title">Neues Event</div>
+    <div class="modal-sub">Wettkampf anlegen und Strecke konfigurieren</div>
+
+    <div class="form-row2">
+      <div class="form-group">
+        <label class="form-label">Event-Name</label>
+        <input class="form-input" id="ev-name" placeholder="z.B. Ironman Hamburg 2025">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Datum</label>
+        <input class="form-input" type="date" id="ev-date">
+      </div>
+    </div>
+    <div class="form-row2">
+      <div class="form-group">
+        <label class="form-label">Ort</label>
+        <input class="form-input" id="ev-location" placeholder="z.B. Hamburg">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Distanz</label>
+        <select class="form-input" id="ev-dist">
+          <option value="full">Ironman (Voll)</option>
+          <option value="70.3">Ironman 70.3</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="card-title">Schwimmen</div>
+    <div class="swim-form">
+      <div class="form-group">
+        <label class="form-label">Distanz (m)</label>
+        <input class="form-input" id="sw-dist" type="number" placeholder="3800" value="3800">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wassertemperatur (°C)</label>
+        <input class="form-input" id="sw-temp" type="number" placeholder="20" value="20">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Neopren</label>
+        <select class="form-input" id="sw-neo">
+          <option value="yes">Ja</option>
+          <option value="no">Nein</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Strömung / Wellen</label>
+        <select class="form-input" id="sw-cond">
+          <option value="calm">Ruhig</option>
+          <option value="choppy">Leicht bewegt</option>
+          <option value="rough">Grob</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="gpx-slots">
+      <div class="gpx-slot">
+        <div class="gpx-slot-head">
+          <div class="sport-badge badge-bike">🚴</div>
+          <div class="slot-name">Radfahren · GPX</div>
+        </div>
+        <div class="gpx-slot-body">
+          <div class="gpx-drop" id="bike-drop" onclick="document.getElementById('bike-gpx').click()">
+            <div class="gpx-drop-icon">📁</div>
+            <div class="gpx-drop-text">GPX-Datei hochladen</div>
+            <div class="gpx-drop-sub">.gpx Dateien werden unterstützt</div>
+          </div>
+          <div id="bike-loaded" style="display:none;" class="gpx-loaded">
+            <div class="gpx-file-info">
+              <span style="font-size:18px;">📄</span>
+              <div>
+                <div class="gpx-file-name" id="bike-file-name">–</div>
+                <div class="gpx-file-meta" id="bike-file-meta">–</div>
+              </div>
+            </div>
+            <div class="gpx-actions">
+              <button class="btn-xs" onclick="showGpxMap('bike')">Karte</button>
+              <button class="btn-xs danger" onclick="clearGpx('bike')">✕</button>
+            </div>
+          </div>
+          <input type="file" id="bike-gpx" accept=".gpx" style="display:none" onchange="loadGpx('bike',this)">
+        </div>
+      </div>
+
+      <div class="gpx-slot">
+        <div class="gpx-slot-head">
+          <div class="sport-badge badge-run">🏃</div>
+          <div class="slot-name">Laufen · GPX</div>
+        </div>
+        <div class="gpx-slot-body">
+          <div class="gpx-drop" id="run-drop" onclick="document.getElementById('run-gpx').click()">
+            <div class="gpx-drop-icon">📁</div>
+            <div class="gpx-drop-text">GPX-Datei hochladen</div>
+            <div class="gpx-drop-sub">.gpx Dateien werden unterstützt</div>
+          </div>
+          <div id="run-loaded" style="display:none;" class="gpx-loaded">
+            <div class="gpx-file-info">
+              <span style="font-size:18px;">📄</span>
+              <div>
+                <div class="gpx-file-name" id="run-file-name">–</div>
+                <div class="gpx-file-meta" id="run-file-meta">–</div>
+              </div>
+            </div>
+            <div class="gpx-actions">
+              <button class="btn-xs" onclick="showGpxMap('run')">Karte</button>
+              <button class="btn-xs danger" onclick="clearGpx('run')">✕</button>
+            </div>
+          </div>
+          <input type="file" id="run-gpx" accept=".gpx" style="display:none" onchange="loadGpx('run',this)">
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP PREVIEW inside modal -->
+    <div id="modal-map-wrap" class="map-wrap" style="display:none;margin-top:16px;">
+      <div class="map-header">
+        <div class="map-title" id="modal-map-title">Streckenkarte</div>
+        <div class="map-legend">
+          <div class="map-leg"><div class="map-leg-line" style="background:#4a9eff"></div>Rad</div>
+          <div class="map-leg"><div class="map-leg-line" style="background:#ff9f47"></div>Lauf</div>
+        </div>
+      </div>
+      <div id="gpx-map"></div>
+      <div class="map-stats">
+        <div class="map-stat"><div class="map-stat-label">Distanz</div><div class="map-stat-val" id="map-dist">–</div></div>
+        <div class="map-stat"><div class="map-stat-label">Höhenmeter</div><div class="map-stat-val" id="map-hm">–</div></div>
+        <div class="map-stat"><div class="map-stat-label">Punkte</div><div class="map-stat-val" id="map-pts">–</div></div>
+        <div class="map-stat"><div class="map-stat-label">Max. Höhe</div><div class="map-stat-val" id="map-maxh">–</div></div>
+      </div>
+      <div class="elev-wrap" style="padding:14px 16px;">
+        <div class="elev-title">Höhenprofil</div>
+        <canvas id="elev-canvas" height="70" style="width:100%;"></canvas>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeEventModal()">Abbrechen</button>
+      <button class="btn primary" onclick="saveEvent()">Event speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- API KEY MODAL -->
+<div class="modal-overlay" id="api-modal">
+  <div class="modal" style="width:420px;">
+    <div class="modal-title">Claude API Key</div>
+    <div class="modal-sub">Erforderlich für das KI-Interview und die Strategie-Generierung</div>
+    <div class="form-group">
+      <label class="form-label">API Key</label>
+      <input class="form-input api-key-input" type="password" id="api-key-input" placeholder="sk-ant-...">
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:12px;">
+      API Key auf <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent);">console.anthropic.com</a> erstellen · wird nur lokal gespeichert
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeApiModal()">Abbrechen</button>
+      <button class="btn primary" onclick="saveApiKey()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let state = {
+  apiKey: localStorage.getItem('im_apikey') || '',
+  events: JSON.parse(localStorage.getItem('im_events') || '[]'),
+  activeEvent: null,
+  chatHistory: [],
+  strategy: null,
+  gpxData: { bike: null, run: null },
+  leafletMap: null,
+  leafletLayers: {}
+};
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+function init() {
+  updateApiStatus();
+  renderEvents();
+  if (state.events.length > 0) {
+    selectEvent(state.events[0]);
+  }
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const navItems = document.querySelectorAll('.nav-item');
+  const pages = ['dashboard','events','chat','strategy'];
+  const idx = pages.indexOf(name);
+  if (idx >= 0) navItems[idx].classList.add('active');
+}
+
+// ─── API KEY ─────────────────────────────────────────────────────────────────
+function openApiModal() {
+  document.getElementById('api-key-input').value = state.apiKey;
+  document.getElementById('api-modal').classList.add('open');
+}
+function closeApiModal() { document.getElementById('api-modal').classList.remove('open'); }
+function saveApiKey() {
+  state.apiKey = document.getElementById('api-key-input').value.trim();
+  localStorage.setItem('im_apikey', state.apiKey);
+  updateApiStatus();
+  closeApiModal();
+  toast('API Key gespeichert');
+}
+function updateApiStatus() {
+  const dot = document.getElementById('api-dot');
+  const txt = document.getElementById('api-status-text');
+  if (state.apiKey) {
+    dot.classList.add('connected');
+    txt.textContent = 'API verbunden';
+  } else {
+    dot.classList.remove('connected');
+    txt.textContent = 'API Key setzen';
+  }
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+function saveDashboard() {
+  const ftp = document.getElementById('inp-ftp').value;
+  const ctl = parseInt(document.getElementById('inp-ctl').value);
+  const atl = parseInt(document.getElementById('inp-atl').value);
+  const tsb = ctl - atl;
+  document.getElementById('disp-ftp').innerHTML = ftp + ' <span class="metric-unit">W</span>';
+  document.getElementById('disp-ctl').textContent = ctl;
+  document.getElementById('disp-atl').textContent = atl;
+  document.getElementById('disp-tsb').textContent = (tsb >= 0 ? '+' : '') + tsb;
+  document.getElementById('dashboard-manual').style.display = 'none';
+  toast('Daten gespeichert');
+}
+
+// ─── EVENTS ──────────────────────────────────────────────────────────────────
+function openEventModal() {
+  state.gpxData = { bike: null, run: null };
+  document.getElementById('bike-drop').style.display = 'block';
+  document.getElementById('bike-loaded').style.display = 'none';
+  document.getElementById('run-drop').style.display = 'block';
+  document.getElementById('run-loaded').style.display = 'none';
+  document.getElementById('modal-map-wrap').style.display = 'none';
+  document.getElementById('event-modal').classList.add('open');
+}
+function closeEventModal() { document.getElementById('event-modal').classList.remove('open'); }
+
+function saveEvent() {
+  const name = document.getElementById('ev-name').value.trim();
+  if (!name) { toast('Bitte Event-Name eingeben'); return; }
+  const ev = {
+    id: Date.now(),
+    name,
+    date: document.getElementById('ev-date').value,
+    location: document.getElementById('ev-location').value,
+    dist: document.getElementById('ev-dist').value,
+    swim: {
+      dist: document.getElementById('sw-dist').value,
+      temp: document.getElementById('sw-temp').value,
+      neo: document.getElementById('sw-neo').value,
+      cond: document.getElementById('sw-cond').value
+    },
+    gpx: {
+      bike: state.gpxData.bike ? { name: state.gpxData.bike.name, stats: state.gpxData.bike.stats } : null,
+      run: state.gpxData.run ? { name: state.gpxData.run.name, stats: state.gpxData.run.stats } : null
+    },
+    chatHistory: [],
+    strategy: null
+  };
+  state.events.push(ev);
+  localStorage.setItem('im_events', JSON.stringify(state.events));
+  selectEvent(ev);
+  renderEvents();
+  closeEventModal();
+  toast('Event gespeichert!');
+}
+
+function renderEvents() {
+  const list = document.getElementById('events-list');
+  if (state.events.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;">Noch keine Events angelegt</div>';
+    return;
+  }
+  list.innerHTML = state.events.map(ev => `
+    <div class="event-card ${ev.strategy ? 'has-strategy' : ''}" onclick="selectEvent(ev)" data-id="${ev.id}">
+      <div class="event-left">
+        <div class="event-icon-wrap">🏆</div>
+        <div>
+          <div class="event-name">${ev.name}</div>
+          <div class="event-meta">${ev.date || 'Datum TBD'} · ${ev.location || '–'} · ${distLabel(ev.dist)}${ev.gpx.bike ? ' · GPX Rad ✓' : ''}${ev.gpx.run ? ' · GPX Lauf ✓' : ''}</div>
+        </div>
+      </div>
+      <div class="event-right">
+        <button class="btn-sm" onclick="event.stopPropagation();selectEventAndChat(${ev.id})">Interview ↗</button>
+        <button class="btn-sm primary" onclick="event.stopPropagation();selectEventAndStrategy(${ev.id})">Strategie ↗</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function distLabel(d) {
+  return d === 'full' ? 'Ironman Voll' : d === '70.3' ? 'Ironman 70.3' : 'Custom';
+}
+
+function selectEvent(ev) {
+  if (typeof ev === 'number') ev = state.events.find(e => e.id === ev);
+  if (!ev) return;
+  state.activeEvent = ev;
+  // Update chat
+  document.getElementById('no-event-msg').style.display = 'none';
+  document.getElementById('chat-area').style.display = 'flex';
+  document.getElementById('chat-event-name').textContent = ev.name;
+  document.getElementById('chat-event-meta').textContent = `${ev.date || 'Datum TBD'} · ${ev.location || '–'} · ${distLabel(ev.dist)}`;
+  state.chatHistory = ev.chatHistory || [];
+  renderChatHistory();
+  if (state.chatHistory.length === 0) startInterview();
+  // Update strategy
+  document.getElementById('strat-event-sub').textContent = `${ev.name} · ${ev.date || ''}`;
+  if (ev.strategy) renderStrategy(ev.strategy);
+  else { document.getElementById('strategy-empty').style.display = 'block'; document.getElementById('strategy-content').style.display = 'none'; }
+}
+
+function selectEventAndChat(id) { selectEvent(id); showPage('chat'); }
+function selectEventAndStrategy(id) { selectEvent(id); showPage('strategy'); }
+
+// ─── GPX PARSING ─────────────────────────────────────────────────────────────
+function loadGpx(sport, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    const parsed = parseGpx(text);
+    parsed.name = file.name;
+    state.gpxData[sport] = parsed;
+    const meta = `${(parsed.stats.distance/1000).toFixed(1)} km · ${Math.round(parsed.stats.elevGain)} hm`;
+    document.getElementById(sport + '-drop').style.display = 'none';
+    document.getElementById(sport + '-loaded').style.display = 'flex';
+    document.getElementById(sport + '-file-name').textContent = file.name;
+    document.getElementById(sport + '-file-meta').textContent = meta;
+  };
+  reader.readAsText(file);
+}
+
+function clearGpx(sport) {
+  state.gpxData[sport] = null;
+  document.getElementById(sport + '-drop').style.display = 'block';
+  document.getElementById(sport + '-loaded').style.display = 'none';
+  document.getElementById(sport + '-gpx').value = '';
+  document.getElementById('modal-map-wrap').style.display = 'none';
+}
+
+function parseGpx(xml) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+  const trkpts = doc.querySelectorAll('trkpt');
+  const points = [];
+  let elevGain = 0, prevElev = null, totalDist = 0, prevLat = null, prevLon = null;
+  let minElev = Infinity, maxElev = -Infinity;
+  trkpts.forEach(pt => {
+    const lat = parseFloat(pt.getAttribute('lat'));
+    const lon = parseFloat(pt.getAttribute('lon'));
+    const elev = parseFloat(pt.querySelector('ele')?.textContent || 0);
+    points.push([lat, lon, elev]);
+    if (prevLat !== null) {
+      const d = haversine(prevLat, prevLon, lat, lon);
+      totalDist += d;
+      if (elev > prevElev) elevGain += (elev - prevElev);
+    }
+    if (elev < minElev) minElev = elev;
+    if (elev > maxElev) maxElev = elev;
+    prevLat = lat; prevLon = lon; prevElev = elev;
+  });
+  return { points, stats: { distance: totalDist, elevGain, minElev, maxElev, pointCount: points.length } };
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function showGpxMap(sport) {
+  const data = state.gpxData[sport];
+  if (!data || data.points.length === 0) return;
+  document.getElementById('modal-map-wrap').style.display = 'block';
+  document.getElementById('modal-map-title').textContent = sport === 'bike' ? 'Rad-Strecke' : 'Lauf-Strecke';
+  document.getElementById('map-dist').textContent = (data.stats.distance/1000).toFixed(1) + ' km';
+  document.getElementById('map-hm').textContent = Math.round(data.stats.elevGain) + ' m';
+  document.getElementById('map-pts').textContent = data.stats.pointCount;
+  document.getElementById('map-maxh').textContent = Math.round(data.stats.maxElev) + ' m';
+
+  // Init / reset map
+  if (state.leafletMap) {
+    state.leafletMap.remove();
+    state.leafletMap = null;
+  }
+  setTimeout(() => {
+    state.leafletMap = L.map('gpx-map', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap',
+      maxZoom: 18
+    }).addTo(state.leafletMap);
+
+    const color = sport === 'bike' ? '#4a9eff' : '#ff9f47';
+    const latlngs = data.points.map(p => [p[0], p[1]]);
+    const poly = L.polyline(latlngs, { color, weight: 3, opacity: 0.85 }).addTo(state.leafletMap);
+
+    // Start/end markers
+    if (latlngs.length > 0) {
+      L.circleMarker(latlngs[0], { radius: 7, color: '#3dd68c', fillColor: '#3dd68c', fillOpacity: 1 })
+        .bindPopup('Start').addTo(state.leafletMap);
+      L.circleMarker(latlngs[latlngs.length-1], { radius: 7, color: '#ff5757', fillColor: '#ff5757', fillOpacity: 1 })
+        .bindPopup('Ziel').addTo(state.leafletMap);
+    }
+    state.leafletMap.fitBounds(poly.getBounds(), { padding: [20,20] });
+    drawElevation(data);
+  }, 100);
+}
+
+function drawElevation(data) {
+  const canvas = document.getElementById('elev-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio || 600;
+  const W = canvas.width, H = canvas.height * window.devicePixelRatio || 70;
+  canvas.height = H;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const cW = canvas.offsetWidth, cH = 70;
+
+  const elevs = data.points.map(p => p[2]);
+  const minE = Math.min(...elevs);
+  const maxE = Math.max(...elevs);
+  const range = maxE - minE || 1;
+
+  ctx.clearRect(0,0,cW,cH);
+  ctx.beginPath();
+  elevs.forEach((e, i) => {
+    const x = (i / (elevs.length-1)) * cW;
+    const y = cH - ((e - minE) / range) * (cH - 10) - 5;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#4a9eff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Fill
+  ctx.lineTo(cW, cH);
+  ctx.lineTo(0, cH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(74,158,255,0.12)';
+  ctx.fill();
+}
+
+// ─── CHAT ─────────────────────────────────────────────────────────────────────
+function renderChatHistory() {
+  const container = document.getElementById('chat-messages');
+  container.innerHTML = '';
+  state.chatHistory.forEach(m => appendMessage(m.role, m.content, false));
+}
+
+function appendMessage(role, content, scroll = true) {
+  const container = document.getElementById('chat-messages');
+  const row = document.createElement('div');
+  row.className = 'msg-row ' + (role === 'user' ? 'user' : 'ai');
+  row.innerHTML = `
+    <div class="msg-avatar ${role === 'user' ? 'avatar-user' : 'avatar-ai'}">${role === 'user' ? 'Du' : 'KI'}</div>
+    <div class="msg-bubble">${content}</div>
+  `;
+  container.appendChild(row);
+  if (scroll) container.scrollTop = container.scrollHeight;
+  return row;
+}
+
+function showTyping() {
+  const container = document.getElementById('chat-messages');
+  const row = document.createElement('div');
+  row.className = 'msg-row ai';
+  row.id = 'typing-indicator';
+  row.innerHTML = `
+    <div class="msg-avatar avatar-ai">KI</div>
+    <div class="msg-bubble loading"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+  `;
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
+}
+function hideTyping() {
+  const t = document.getElementById('typing-indicator');
+  if (t) t.remove();
+}
+
+function getFitnessContext() {
+  const ftp = document.getElementById('inp-ftp')?.value || document.getElementById('disp-ftp')?.textContent?.replace(/\D/g,'') || '287';
+  const runpace = document.getElementById('inp-runpace')?.value || '4:32';
+  const css = document.getElementById('inp-css')?.value || '1:38';
+  const weight = document.getElementById('inp-weight')?.value || '78';
+  return `Athleten-Daten: FTP=${ftp}W, Lauf-Threshold=${runpace}/km, Swim-CSS=${css}/100m, Gewicht=${weight}kg.`;
+}
+
+function getEventContext() {
+  if (!state.activeEvent) return '';
+  const ev = state.activeEvent;
+  let ctx = `Event: ${ev.name}, ${ev.date || 'Datum TBD'}, ${ev.location || '–'}, Distanz: ${distLabel(ev.dist)}.`;
+  ctx += ` Schwimmen: ${ev.swim.dist}m, ${ev.swim.temp}°C, Neopren: ${ev.swim.neo === 'yes' ? 'Ja' : 'Nein'}, Bedingungen: ${ev.swim.cond}.`;
+  if (ev.gpx.bike) ctx += ` Rad-Strecke: ${ev.gpx.bike.stats ? (ev.gpx.bike.stats.distance/1000).toFixed(1)+'km, '+Math.round(ev.gpx.bike.stats.elevGain)+'hm' : 'geladen'}.`;
+  if (ev.gpx.run) ctx += ` Lauf-Strecke: ${ev.gpx.run.stats ? (ev.gpx.run.stats.distance/1000).toFixed(1)+'km, '+Math.round(ev.gpx.run.stats.elevGain)+'hm' : 'geladen'}.`;
+  return ctx;
+}
+
+async function startInterview() {
+  if (!state.apiKey) {
+    appendMessage('ai', '⚠️ Bitte zuerst den Claude API Key in der Sidebar eintragen (unten links).');
+    return;
+  }
+  const systemPrompt = buildSystemPrompt();
+  const firstMsg = 'Starte das Interview auf Deutsch. Stelle eine erste gezielte Frage zur Rennerfahrung des Athleten. Kurz, freundlich, direkt.';
+  await callClaude(systemPrompt, [{ role: 'user', content: firstMsg }], true, true);
+}
+
+function buildSystemPrompt() {
+  return `Du bist ein erfahrener Triathlon-Coach und Rennstratege. Du interviewst einen Athleten auf Deutsch, um eine maßgeschneiderte Ironman-Rennstrategie zu entwickeln.
+
+${getFitnessContext()}
+${getEventContext()}
+
+Deine Aufgabe:
+1. Stelle gezielte Fragen zu Rennerfahrung, Schwächen, Verpflegungsverträglichkeit, Hitzeempfindlichkeit, bisherigen Ironman-Erfahrungen
+2. Frage maximal 6-8 Fragen, dann hast du genug Daten
+3. Wenn du genug Informationen hast, sage dem Athleten: "Ich habe genug Informationen. Klicke auf 'Strategie generieren' um deine persönliche Rennstrategie zu erstellen."
+4. Antworte immer auf Deutsch, kurz und präzise
+5. Beziehe dich auf die Athleten-Daten und das Event`;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !state.apiKey) return;
+  input.value = '';
+  appendMessage('user', text);
+  state.chatHistory.push({ role: 'user', content: text });
+  const systemPrompt = buildSystemPrompt();
+  await callClaude(systemPrompt, state.chatHistory, false, false);
+}
+
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+async function callClaude(system, messages, isFirst = false, skipHistory = false) {
+  if (!state.apiKey) return;
+  document.getElementById('chat-send-btn').disabled = true;
+  showTyping();
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system,
+        messages: skipHistory ? messages : state.chatHistory
+      })
+    });
+    const data = await res.json();
+    hideTyping();
+    if (data.content && data.content[0]) {
+      const reply = data.content[0].text;
+      appendMessage('ai', reply);
+      if (!skipHistory) {
+        state.chatHistory.push({ role: 'assistant', content: reply });
+      } else {
+        state.chatHistory = [{ role: 'assistant', content: reply }];
+      }
+      // Save to event
+      if (state.activeEvent) {
+        state.activeEvent.chatHistory = state.chatHistory;
+        localStorage.setItem('im_events', JSON.stringify(state.events));
+      }
+    } else {
+      appendMessage('ai', '⚠️ Fehler: ' + (data.error?.message || JSON.stringify(data)));
+    }
+  } catch(err) {
+    hideTyping();
+    appendMessage('ai', '⚠️ API-Fehler: ' + err.message);
+  }
+  document.getElementById('chat-send-btn').disabled = false;
+}
+
+// ─── STRATEGY ────────────────────────────────────────────────────────────────
+async function generateStrategy() {
+  if (!state.apiKey) { openApiModal(); return; }
+  if (!state.activeEvent) return;
+  showPage('strategy');
+  document.getElementById('strategy-empty').style.display = 'none';
+  document.getElementById('strategy-content').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text2);font-size:13px;">Strategie wird generiert… <div class="typing-dots" style="display:inline-flex;margin-left:8px;"><span></span><span></span><span></span></div></div>';
+  document.getElementById('strategy-content').style.display = 'block';
+
+  const chatSummary = state.chatHistory.map(m => `${m.role === 'user' ? 'Athlet' : 'Coach'}: ${m.content}`).join('\n');
+
+  const prompt = `${getFitnessContext()}
+${getEventContext()}
+
+Interview-Zusammenfassung:
+${chatSummary || 'Kein Interview durchgeführt.'}
+
+Erstelle eine detaillierte JSON-Rennstrategie mit folgender Struktur (antworte NUR mit gültigem JSON, kein Markdown):
+{
+  "targetTime": "9:42",
+  "swim": { "targetTime": "1:05", "pace": "1:42", "notes": "..." },
+  "t1": "5:00",
+  "bike": {
+    "targetTime": "5:10",
+    "targetIF": 0.72,
+    "targetWatt": 207,
+    "segments": [
+      { "name": "Segment", "kmStart": 0, "kmEnd": 45, "elevGain": 80, "targetWatt": 204, "zone": "Z2", "notes": "..." }
+    ]
+  },
+  "t2": "4:00",
+  "run": {
+    "targetTime": "3:18",
+    "targetPace": "4:42",
+    "phases": [
+      { "km": "0-10", "pace": "5:00", "notes": "..." },
+      { "km": "10-30", "pace": "4:42", "notes": "..." },
+      { "km": "30-42", "pace": "4:50", "notes": "..." }
+    ]
+  },
+  "nutrition": {
+    "totalCarbs": 280,
+    "totalSodium": 4000,
+    "plan": [
+      { "time": "0:45", "item": "Gel + 500ml Iso", "carbs": 60, "sodium": 400, "sport": "bike" }
+    ]
+  },
+  "keyNotes": ["Wichtiger Hinweis 1", "..."]
+}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    let raw = data.content?.[0]?.text || '';
+    raw = raw.replace(/```json|```/g, '').trim();
+    const strategy = JSON.parse(raw);
+    state.activeEvent.strategy = strategy;
+    localStorage.setItem('im_events', JSON.stringify(state.events));
+    renderStrategy(strategy);
+    renderEvents();
+  } catch(err) {
+    document.getElementById('strategy-content').innerHTML = `<div style="padding:40px;color:var(--red);font-size:13px;">Fehler beim Generieren: ${err.message}</div>`;
+  }
+}
+
+function renderStrategy(s) {
+  document.getElementById('strategy-empty').style.display = 'none';
+  const el = document.getElementById('strategy-content');
+  el.style.display = 'block';
+
+  const segs = (s.bike?.segments || []).map(seg => `
+    <tr>
+      <td>${seg.name}</td>
+      <td style="font-family:var(--mono)">${seg.kmStart}–${seg.kmEnd} km</td>
+      <td style="font-family:var(--mono)">+${seg.elevGain} m</td>
+      <td style="font-family:var(--mono);font-weight:600">${seg.targetWatt} W</td>
+      <td><span class="zone-pill ${seg.zone === 'Z2' ? 'z2' : 'z3'}">${seg.zone}</span></td>
+    </tr>
+  `).join('');
+
+  const vpRows = (s.nutrition?.plan || []).map(item => {
+    const pct = Math.min(100, Math.round(item.carbs / 90 * 100));
+    const color = item.sport === 'bike' ? '#4a9eff' : '#ff9f47';
+    return `<div class="vp-row">
+      <span class="vp-time">${item.time}</span>
+      <div class="vp-bar-wrap"><div class="vp-bar" style="width:${pct}%;background:${color}"></div></div>
+      <span class="vp-desc">${item.item}</span>
+      <span class="vp-carbs">${item.carbs}g</span>
+    </div>`;
+  }).join('');
+
+  const runPhases = (s.run?.phases || []).map(p => `
+    <div class="run-zone">
+      <div class="run-zone-label">km ${p.km}</div>
+      <div class="run-zone-val">${p.pace} <span style="font-size:11px;font-weight:400;color:var(--text3)">/km</span></div>
+      <div class="run-zone-sub">${p.notes}</div>
+    </div>
+  `).join('');
+
+  const notes = (s.keyNotes || []).map(n => `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);"><span style="color:var(--accent)">→</span>${n}</div>`).join('');
+
+  el.innerHTML = `
+    <div class="strategy-header">
+      <div class="metric-card">
+        <div class="metric-label">Zielzeit</div>
+        <div class="metric-value">${s.targetTime || '–'} <span class="metric-unit">h</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Ziel-Watt Rad</div>
+        <div class="metric-value">${s.bike?.targetWatt || '–'} <span class="metric-unit">W</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Lauf Zielpace</div>
+        <div class="metric-value">${s.run?.targetPace || '–'} <span class="metric-unit">/km</span></div>
+      </div>
+    </div>
+
+    <div class="strat-grid">
+      <div class="strat-section">
+        <div class="strat-title">Zeiten Übersicht</div>
+        <table class="seg-table">
+          <tr><th>Disziplin</th><th>Zeit</th></tr>
+          <tr><td>🏊 Schwimmen</td><td style="font-family:var(--mono)">${s.swim?.targetTime || '–'}</td></tr>
+          <tr><td>T1</td><td style="font-family:var(--mono)">${s.t1 || '–'}</td></tr>
+          <tr><td>🚴 Radfahren</td><td style="font-family:var(--mono)">${s.bike?.targetTime || '–'}</td></tr>
+          <tr><td>T2</td><td style="font-family:var(--mono)">${s.t2 || '–'}</td></tr>
+          <tr><td>🏃 Laufen</td><td style="font-family:var(--mono)">${s.run?.targetTime || '–'}</td></tr>
+          <tr><td style="font-weight:600">Gesamt</td><td style="font-family:var(--mono);font-weight:600;color:var(--accent)">${s.targetTime || '–'}</td></tr>
+        </table>
+      </div>
+
+      <div class="strat-section">
+        <div class="strat-title">Lauf-Pacing</div>
+        <div class="run-zones">${runPhases}</div>
+      </div>
+
+      ${segs ? `<div class="strat-section full">
+        <div class="strat-title">Rad · Watt-Pacing nach Segment</div>
+        <table class="seg-table">
+          <tr><th>Segment</th><th>Km</th><th>HM</th><th>Watt</th><th>Zone</th></tr>
+          ${segs}
+        </table>
+      </div>` : ''}
+
+      <div class="strat-section full">
+        <div class="strat-title">Verpflegungsplan · ${s.nutrition?.totalCarbs || '–'}g KH gesamt</div>
+        ${vpRows}
+        <div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;font-family:var(--mono);color:var(--text3);">
+          <span>Gesamt KH: ${s.nutrition?.totalCarbs || '–'}g</span>
+          <span>Natrium: ${s.nutrition?.totalSodium || '–'}mg</span>
+        </div>
+      </div>
+
+      ${notes ? `<div class="strat-section full">
+        <div class="strat-title">Coach-Hinweise</div>
+        ${notes}
+      </div>` : ''}
+    </div>
+
+    <div style="margin-top:16px;text-align:right;">
+      <button class="btn" onclick="generateStrategy()">↻ Neu generieren</button>
+    </div>
+  `;
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─── START ───────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
